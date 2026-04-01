@@ -32,7 +32,13 @@ _spreadsheet = None
 def _get_client(credentials_path: str):
     global _client
     if _client is None:
-        creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
+        # Support credentials as JSON string in env var (for Railway/cloud hosting)
+        creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+        if creds_json:
+            info = json.loads(creds_json)
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        else:
+            creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
         _client = gspread.authorize(creds)
     return _client
 
