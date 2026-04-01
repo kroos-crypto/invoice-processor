@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rechnungsverarbeitung</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <h1>📦 Rechnungsverarbeitung</h1>
+    <p class="subtitle">Rechnung hochladen → automatisch erkennen → Google Sheet</p>
+    <div id="status-bar" class="status-bar hidden"></div>
+  </header>
+
+  <!-- Main form -->
+  <main>
+
+    <!-- Step 1: Category -->
+    <section class="card">
+      <h2><span class="step">1</span> Kategorie wählen <span class="required">*</span></h2>
+      <div class="category-group" id="category-group">
+        {% for cat in categories %}
+        <label class="cat-btn">
+          <input type="radio" name="category" value="{{ cat }}" />
+          <span>{{ cat }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="hint">Pflichtfeld – muss vor dem Upload ausgewählt werden.</p>
+    </section>
+
+    <!-- Step 2: Reference -->
+    <section class="card">
+      <h2><span class="step">2</span> Interne Referenz <span class="optional">(optional)</span></h2>
+      <input type="text" id="referenz" placeholder="z.B. OR25EXAMPLE001 oder BL25EXAMPLE001"
+             autocomplete="off" />
+      <p class="hint">Nur nötig wenn die Rechnung keine Referenz enthält (z.B. Expeditors, Lagerkosten).</p>
+    </section>
+
+    <!-- Step 3: Drop zone -->
+    <section class="card">
+      <h2><span class="step">3</span> Dateien hochladen</h2>
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon">📂</div>
+        <p>Dateien hierher ziehen oder klicken</p>
+        <p class="small">PDF, CSV, XLSX – max. 50 MB je Datei</p>
+        <input type="file" id="file-input" multiple
+               accept=".pdf,.csv,.xlsx,.xls" hidden />
+      </div>
+      <div id="file-list" class="file-list hidden"></div>
+    </section>
+
+    <!-- Upload button -->
+    <div class="actions">
+      <button id="upload-btn" class="btn-primary" disabled>
+        Rechnungen verarbeiten →
+      </button>
+      <button id="clear-btn" class="btn-secondary hidden">
+        Zurücksetzen
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Results -->
+  <section id="results-section" class="hidden">
+    <h2>Ergebnisse</h2>
+    <div id="results-container"></div>
+  </section>
+
+</div>
+
+<!-- Duplicate modal -->
+<div id="duplicate-modal" class="modal hidden">
+  <div class="modal-box">
+    <h3>⚠️ Duplikat erkannt</h3>
+    <p id="duplicate-message"></p>
+    <div class="modal-actions">
+      <button id="dup-skip" class="btn-secondary">Überspringen</button>
+      <button id="dup-force" class="btn-warning">Trotzdem importieren</button>
+    </div>
+  </div>
+</div>
+<div id="modal-overlay" class="modal-overlay hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

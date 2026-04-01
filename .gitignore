@@ -1,0 +1,6 @@
+credentials.json
+.env
+uploads/
+__pycache__/
+*.pyc
+processed_invoices.json
