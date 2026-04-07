@@ -1,22 +1,75 @@
 """
 FedEx CSV Invoice Parser.
-Handles FedEx detail CSV exports (Zoll/Steuer and Rechnung-Fracht).
-Row 1 is the header row with German column names.
-Charge labels and amounts appear as alternating pairs starting
-at column "Luftfrachtbrief – Gebührenetikett" / "Luftfrachtbrief – Gebührenbetrag".
+Uses positional (index-based) reading because FedEx CSVs contain many
+duplicate column names ("Luftfrachtbrief – Gebührenetikett" / "Gebührenbetrag"
+repeated up to 50 times). csv.DictReader would silently drop all but the last.
+
+Fixed column positions (verified against real export):
+  0   Rechnungsland/-gebiet
+  1   Rechnungsart
+  5   FedEx Rechnungsnummer
+  6   Rechnungsdatum
+  7   Fälligkeitsdatum
+  8   Rechnungswährung
+  9   Gesamtbetrag Standardgebühren
+ 13   Fälliger ursprünglicher Betrag
+ 16   Luftfrachtbriefnummer
+ 18   Absenderreferenz 1
+ 19   Absenderreferenz 2
+ 24   Versanddatum (formatiert)
+ 27   Service
+ 28   Verpackung
+ 32   Stücke
+ 33   Tatsächliches Gewicht
+ 34   Tatsächliche Gewichtseinheiten
+ 38   Firma Absender
+ 46   Absenderadresse Land/Gebiet
+ 47   Firma Empfänger
+ 55   Empfängeradresse Land/Gebiet
+ 65   Luftfrachtbrief – Gesamtbetrag  (per-shipment total)
+ 66+  Alternating Gebührenetikett / Gebührenbetrag pairs
 """
 import csv
 from pathlib import Path
 from .base import BaseParser
 from utils.normalizer import normalize_number, normalize_date
 
+# Fixed column indices
+C_RECHNUNGSART  = 1
+C_INVOICE_NR    = 5
+C_INV_DATE      = 6
+C_DUE_DATE      = 7
+C_CURRENCY      = 8
+C_TOTAL_STD     = 9
+C_TOTAL_DUE     = 13
+C_TRACKING      = 16
+C_REF1          = 18
+C_REF2          = 19
+C_SHIP_DATE     = 24
+C_SERVICE       = 27
+C_PACKAGING     = 28
+C_PIECES        = 32
+C_WEIGHT        = 33
+C_WEIGHT_UNIT   = 34
+C_SENDER_NAME   = 38
+C_SENDER_LAND   = 46
+C_RECV_NAME     = 47
+C_RECV_LAND     = 55
+C_CHARGE_START  = 66   # first Gebührenetikett; +1 = Betrag, +2 = next Etikett, ...
+
+
+def _col(row: list, idx: int, default: str = '') -> str:
+    try:
+        return row[idx].strip()
+    except (IndexError, AttributeError):
+        return default
+
 
 class FedExCSVParser(BaseParser):
     name = 'FedEx'
 
     def detect(self, text: str, filepath: str = '') -> bool:
-        ext = Path(filepath).suffix.lower()
-        if ext not in ('.csv',):
+        if Path(filepath).suffix.lower() != '.csv':
             return False
         try:
             with open(filepath, encoding='utf-8-sig', errors='replace') as f:
@@ -24,7 +77,7 @@ class FedExCSVParser(BaseParser):
             return (
                 'FedEx Rechnungsnummer' in header or
                 'Luftfrachtbriefnummer' in header or
-                'Rechnungsland' in header
+                'Rechnungsland/-gebiet' in header
             )
         except Exception:
             return False
@@ -33,48 +86,42 @@ class FedExCSVParser(BaseParser):
         rows = []
         try:
             with open(filepath, encoding='utf-8-sig', errors='replace', newline='') as f:
-                reader = csv.DictReader(f)
-                headers = reader.fieldnames or []
+                reader = csv.reader(f)
+                headers = next(reader)   # skip header row - we use fixed indices
 
-                # Find charge label/amount column pairs
-                label_cols = [h for h in headers if 'Gebührenetikett' in h or 'Gebuehrenetikett' in h]
-                amount_cols = [h for h in headers if 'Gebührenbetrag' in h or 'Gebuehrenbetrag' in h]
-                charge_pairs = list(zip(label_cols, amount_cols))
-
-                # Detect invoice type (Transport vs Zoll)
-                rechnungsart_col = next(
-                    (h for h in headers if 'Rechnungsart' in h), None
-                )
+                # Sanity check: need at least up to first charge pair
+                if len(headers) < C_CHARGE_START:
+                    return []
 
                 for data in reader:
-                    invoice_nr  = data.get('FedEx Rechnungsnummer', '').strip()
-                    inv_date    = normalize_date(data.get('Rechnungsdatum', '').strip())
-                    due_date    = normalize_date(data.get('Fälligkeitsdatum', '').strip())
-                    currency    = data.get('Rechnungswährung', 'EUR').strip()
-                    total       = normalize_number(data.get('Fälliger ursprünglicher Betrag', '') or
-                                                   data.get('Gesamtbetrag Standardgebühren', ''))
-                    tracking    = data.get('Luftfrachtbriefnummer', '').strip()
-                    ref1        = data.get('Absenderreferenz 1', '').strip()
-                    ref2        = data.get('Absenderreferenz 2', '').strip()
-                    referenz    = ref1 or ref2
-                    ship_date   = normalize_date(data.get('Versanddatum (formatiert)', '').strip())
-                    service     = data.get('Service', '').strip()
-                    pieces      = data.get('Stücke', '').strip()
-                    weight      = normalize_number(data.get('Tatsächliches Gewicht', ''))
-                    weight_unit = data.get('Tatsächliche Gewichtseinheiten', '').strip()
-                    packaging   = data.get('Verpackung', '').strip()
-                    sender_name = data.get('Firma Absender', '').strip()
-                    sender_land = data.get('Absenderadresse Land/Gebiet', '').strip()
-                    recv_name   = data.get('Firma Empfänger', '').strip()
-                    recv_land   = data.get('Empfängeradresse Land/Gebiet', '').strip()
-                    goods_desc  = ''  # not in FedEx CSV
+                    if not data or not _col(data, C_INVOICE_NR):
+                        continue  # skip empty / summary rows
 
-                    rechnungsart = data.get(rechnungsart_col, '').strip() if rechnungsart_col else ''
+                    invoice_nr   = _col(data, C_INVOICE_NR)
+                    inv_date     = normalize_date(_col(data, C_INV_DATE))
+                    due_date     = normalize_date(_col(data, C_DUE_DATE))
+                    currency     = _col(data, C_CURRENCY) or 'EUR'
+                    total        = normalize_number(_col(data, C_TOTAL_DUE) or _col(data, C_TOTAL_STD))
+                    tracking     = _col(data, C_TRACKING)
+                    ref1         = _col(data, C_REF1)
+                    ref2         = _col(data, C_REF2)
+                    referenz     = ref1 or ref2
+                    ship_date    = normalize_date(_col(data, C_SHIP_DATE))
+                    service      = _col(data, C_SERVICE) or _col(data, C_RECHNUNGSART)
+                    pieces       = _col(data, C_PIECES)
+                    weight       = normalize_number(_col(data, C_WEIGHT))
+                    packaging    = _col(data, C_PACKAGING)
+                    sender_name  = _col(data, C_SENDER_NAME)
+                    sender_land  = _col(data, C_SENDER_LAND)
+                    recv_name    = _col(data, C_RECV_NAME)
+                    recv_land    = _col(data, C_RECV_LAND)
 
-                    # Create one row per charge label/amount pair (non-zero)
-                    for label_col, amount_col in charge_pairs:
-                        label  = data.get(label_col, '').strip()
-                        amount = normalize_number(data.get(amount_col, ''))
+                    # Walk all charge pairs starting at C_CHARGE_START
+                    i = C_CHARGE_START
+                    while i + 1 < len(data):
+                        label  = _col(data, i)
+                        amount = normalize_number(_col(data, i + 1))
+                        i += 2
 
                         if not label or not amount or amount == 0.0:
                             continue
@@ -88,14 +135,14 @@ class FedExCSVParser(BaseParser):
                         row['trackingnummer']        = tracking
                         row['referenz']              = referenz
                         row['sendungsdatum']         = ship_date
-                        row['serviceart']            = service or rechnungsart
+                        row['serviceart']            = service
                         row['cost_label']            = label
                         row['incoterm']              = ''
                         row['versender_name']        = sender_name
                         row['versender_land']        = sender_land
                         row['empfaenger_name']       = recv_name
                         row['empfaenger_land']       = recv_land
-                        row['warenbeschreibung']     = goods_desc
+                        row['warenbeschreibung']     = ''
                         row['gewicht_kg']            = weight
                         row['anzahl_pakete']         = pieces
                         row['verpackungsart']        = packaging
@@ -106,6 +153,6 @@ class FedExCSVParser(BaseParser):
 
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f'FedEx CSV parse error: {e}')
+            logging.getLogger(__name__).error(f'FedEx CSV parse error: {e}', exc_info=True)
 
         return rows
