@@ -92,7 +92,7 @@ def upload():
     """
     Accepts: multipart/form-data with fields:
       - files[]:  one or more invoice files
-      - category: one of CATEGORIES
+      - category: optional override – one of CATEGORIES. If blank, auto-categorization is used.
       - referenz:  optional manual reference (OR.../BL.../PBL...)
       - force:    'true' to bypass duplicate check
     Returns: JSON { results: [...], errors: [...] }
@@ -102,10 +102,8 @@ def upload():
     force     = request.form.get('force', 'false').lower() == 'true'
     files     = request.files.getlist('files[]')
 
-    # Validate category
-    if category not in CATEGORIES:
-        return jsonify({'error': f'Ungültige Kategorie: {category!r}. '
-                                 f'Bitte wähle: {", ".join(CATEGORIES)}'}), 400
+    # category is optional; if supplied it must be valid
+    category_override = category if category in CATEGORIES else None
 
     if not files:
         return jsonify({'error': 'Keine Dateien hochgeladen.'}), 400
@@ -158,9 +156,11 @@ def upload():
             # Write to Google Sheet
             written = 0
             sheet_error = None
+            counts = {}
             if SPREADSHEET_ID:
                 try:
-                    written = append_rows(rows, category, CREDENTIALS_PATH, SPREADSHEET_ID)
+                    counts = append_rows(rows, category_override, CREDENTIALS_PATH, SPREADSHEET_ID)
+                    written = sum(counts.values())
                 except Exception as e:
                     sheet_error = str(e)
                     logger.error(f'Sheets write error for {filename}: {e}')
@@ -169,14 +169,17 @@ def upload():
 
             # Mark as processed (even if sheet failed, to avoid re-uploads)
             if invoice_nr and not sheet_error:
-                mark_as_processed(invoice_nr, filename, category)
+                mark_as_processed(invoice_nr, filename, category_override or 'auto')
+
+            # Build human-readable tabs summary  e.g. "Transport: 3, Zoll: 1"
+            tabs_summary = ', '.join(f'{t}: {n}' for t, n in counts.items()) if counts else ''
 
             results.append({
                 'file':        filename,
                 'status':      'ok' if not sheet_error else 'sheet_error',
                 'invoice_nr':  invoice_nr,
                 'provider':    provider,
-                'category':    category,
+                'category':    tabs_summary or category_override or 'auto',
                 'rows_parsed': len(rows),
                 'rows_written': written,
                 'error':       sheet_error,

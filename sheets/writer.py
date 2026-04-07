@@ -1,9 +1,12 @@
 """
 Google Sheets writer.
-Appends parsed invoice rows to the correct tab based on category.
+- Appends parsed invoice rows to the correct tab based on auto-categorization.
+- Reads categorization rules from the 'Kategorieregeln' tab.
+- Unknown cost labels go to the 'Ungeklaert' tab.
 """
 import os
 import json
+import logging
 from datetime import datetime
 
 import gspread
@@ -11,31 +14,77 @@ from google.oauth2.service_account import Credentials
 
 from parsers.base import COLUMNS, COLUMN_HEADERS
 
-# ─── Configuration ────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+# ─── Scopes ───────────────────────────────────────────────────────────────────
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.readonly',
 ]
 
-# Tab names in the Google Sheet
-TAB_MAP = {
-    'Transport':              'Transport',
-    'Zoll':                   'Zoll',
-    'Lagerkosten & Diverse':  'Lagerkosten & Diverse',
-}
+# ─── Tab names ────────────────────────────────────────────────────────────────
+TAB_TRANSPORT  = 'Transport'
+TAB_ZOLL       = 'Zoll'
+TAB_LAGER      = 'Lagerkosten & Diverse'
+TAB_RULES      = 'Kategorieregeln'
+TAB_UNKNOWN    = 'Ungeklaert'
 
-# ─── Module-level client cache ─────────────────────────────────────────────────
-_client = None
+MAIN_TABS = [TAB_TRANSPORT, TAB_ZOLL, TAB_LAGER]
+ALL_TABS  = MAIN_TABS + [TAB_RULES, TAB_UNKNOWN]
+
+VALID_CATEGORIES = {TAB_TRANSPORT, TAB_ZOLL, TAB_LAGER}
+
+# ─── Starter rules ────────────────────────────────────────────────────────────
+STARTER_RULES = [
+    # UPS charge codes
+    ('UPS', 'FRT_008',  TAB_TRANSPORT),
+    ('UPS', 'FRT',      TAB_TRANSPORT),
+    ('UPS', 'FSC',      TAB_TRANSPORT),   # Fuel Surcharge
+    ('UPS', 'BRK_405',  TAB_ZOLL),        # Vorlageprovision
+    ('UPS', 'BRK_410',  TAB_ZOLL),        # Zusätzl. Tarifpos.
+    ('UPS', 'BRK',      TAB_ZOLL),
+    ('UPS', 'GOV_201',  TAB_ZOLL),        # Zoll
+    ('UPS', 'GOV',      TAB_ZOLL),
+    ('UPS', 'EXM_1461', TAB_TRANSPORT),   # Einfuhrumsatzsteuer → Transport per user request
+    ('UPS', 'EXM',      TAB_TRANSPORT),
+    ('UPS', 'ACS',      TAB_TRANSPORT),   # Address Correction
+    ('UPS', 'RSC',      TAB_TRANSPORT),   # Remote Area
+    # FedEx CSV charge labels
+    ('FedEx', 'Zölle',                TAB_ZOLL),
+    ('FedEx', 'Aufwendungspauschale', TAB_ZOLL),
+    ('FedEx', 'USt. CBS DE 19.%',     TAB_TRANSPORT),
+    ('FedEx', 'Kraftstoffzuschlag',   TAB_TRANSPORT),
+    ('FedEx', 'Transportgebühr',      TAB_TRANSPORT),
+    ('FedEx', 'Express Fracht',       TAB_TRANSPORT),
+    ('FedEx', 'Fracht',               TAB_TRANSPORT),
+    ('FedEx', 'Residential Delivery', TAB_TRANSPORT),
+    ('FedEx', 'Zustellgebühr',        TAB_TRANSPORT),
+    # Transdirekt – everything is Transport
+    ('Transdirekt', 'Frachtkosten',   TAB_TRANSPORT),
+    ('Transdirekt', 'Loseverladung',  TAB_TRANSPORT),
+    ('Transdirekt', '*',              TAB_TRANSPORT),
+    # Raben – everything is Transport
+    ('Raben',        '*',             TAB_TRANSPORT),
+    # Expeditors – everything is Transport (user confirmed)
+    ('Expeditors',   '*',             TAB_TRANSPORT),
+    # Logfret – Air Freight = Transport
+    ('Logfret',      'Air Freight',   TAB_TRANSPORT),
+    ('Logfret',      '*',             TAB_TRANSPORT),
+]
+
+# ─── Client cache ─────────────────────────────────────────────────────────────
+_client      = None
 _spreadsheet = None
+_rules_cache = None   # (timestamp, rules_dict)
+RULES_TTL    = 300    # seconds before re-reading rules from sheet
 
 
 def _get_client(credentials_path: str):
     global _client
     if _client is None:
-        # Support credentials as JSON string in env var (for Railway/cloud hosting)
         creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
         if creds_json:
-            info = json.loads(creds_json)
+            info  = json.loads(creds_json)
             creds = Credentials.from_service_account_info(info, scopes=SCOPES)
         else:
             creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
@@ -46,99 +95,231 @@ def _get_client(credentials_path: str):
 def _get_spreadsheet(credentials_path: str, spreadsheet_id: str):
     global _spreadsheet
     if _spreadsheet is None:
-        client = _get_client(credentials_path)
+        client       = _get_client(credentials_path)
         _spreadsheet = client.open_by_key(spreadsheet_id)
     return _spreadsheet
 
 
-# ─── Header initialisation ─────────────────────────────────────────────────────
+def _get_or_create_ws(ss, title: str, rows: int = 2000, cols: int = 30):
+    titles = [ws.title for ws in ss.worksheets()]
+    if title not in titles:
+        return ss.add_worksheet(title=title, rows=rows, cols=cols)
+    return ss.worksheet(title)
+
+
+# ─── Header initialisation ────────────────────────────────────────────────────
 def ensure_headers(credentials_path: str, spreadsheet_id: str):
-    """
-    Make sure all 3 tabs exist and have the correct header row.
-    Call this once on app startup.
-    """
-    ss = _get_spreadsheet(credentials_path, spreadsheet_id)
+    ss      = _get_spreadsheet(credentials_path, spreadsheet_id)
     headers = [COLUMN_HEADERS[col] for col in COLUMNS]
 
-    existing_titles = [ws.title for ws in ss.worksheets()]
-
-    for tab_name in TAB_MAP.values():
-        if tab_name not in existing_titles:
-            ws = ss.add_worksheet(title=tab_name, rows=1000, cols=len(headers))
-        else:
-            ws = ss.worksheet(tab_name)
-
-        # Check if header row is already set
+    # Main data tabs
+    for tab_name in MAIN_TABS:
+        ws        = _get_or_create_ws(ss, tab_name, rows=5000, cols=len(headers) + 2)
         first_row = ws.row_values(1)
         if not first_row or first_row[0] != headers[0]:
             ws.update('A1', [headers])
-            # Format header row: bold + freeze
-            ws.format('A1:Y1', {
-                'textFormat': {'bold': True},
+            ws.format(f'A1:{_col_letter(len(headers))}1', {
+                'textFormat':      {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
                 'backgroundColor': {'red': 0.18, 'green': 0.34, 'blue': 0.56},
-                'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
             })
             ws.freeze(rows=1)
 
+    # Kategorieregeln tab
+    rules_ws  = _get_or_create_ws(ss, TAB_RULES, rows=500, cols=3)
+    first_row = rules_ws.row_values(1)
+    if not first_row or first_row[0] != 'Carrier':
+        rules_ws.update('A1', [['Carrier', 'Cost_Label', 'Category']])
+        rules_ws.format('A1:C1', {
+            'textFormat':      {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
+            'backgroundColor': {'red': 0.2, 'green': 0.5, 'blue': 0.3},
+        })
+        rules_ws.freeze(rows=1)
+        # Insert starter rules
+        rules_ws.append_rows(
+            [[c, l, cat] for c, l, cat in STARTER_RULES],
+            value_input_option='USER_ENTERED'
+        )
+        logger.info(f'Kategorieregeln tab initialised with {len(STARTER_RULES)} starter rules.')
 
-# ─── Append rows ───────────────────────────────────────────────────────────────
-def append_rows(rows: list[dict], category: str,
-                credentials_path: str, spreadsheet_id: str) -> int:
+    # Ungeklaert tab
+    unk_headers = ['Upload-Datum', 'Quelldatei', 'Carrier', 'Cost_Label',
+                   'Trackingnummer', 'Referenz', 'Betrag EUR', 'Rechnungs-Nr.']
+    unk_ws    = _get_or_create_ws(ss, TAB_UNKNOWN, rows=500, cols=len(unk_headers))
+    first_row = unk_ws.row_values(1)
+    if not first_row or first_row[0] != unk_headers[0]:
+        unk_ws.update('A1', [unk_headers])
+        unk_ws.format(f'A1:{_col_letter(len(unk_headers))}1', {
+            'textFormat':      {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
+            'backgroundColor': {'red': 0.7, 'green': 0.3, 'blue': 0.1},
+        })
+        unk_ws.freeze(rows=1)
+
+
+# ─── Rules engine ─────────────────────────────────────────────────────────────
+def load_rules(credentials_path: str, spreadsheet_id: str) -> dict:
     """
-    Append a list of row dicts to the correct tab.
-    Returns the number of rows written.
+    Load categorization rules from the Kategorieregeln tab.
+    Returns dict: {(carrier_lower, label_lower): category}
+    Uses a short TTL cache to avoid re-reading on every upload.
+    """
+    global _rules_cache
+    now = datetime.now().timestamp()
+
+    if _rules_cache:
+        ts, rules = _rules_cache
+        if now - ts < RULES_TTL:
+            return rules
+
+    try:
+        ss    = _get_spreadsheet(credentials_path, spreadsheet_id)
+        ws    = ss.worksheet(TAB_RULES)
+        data  = ws.get_all_values()
+        rules = {}
+        for row in data[1:]:  # skip header
+            if len(row) < 3:
+                continue
+            carrier  = row[0].strip()
+            label    = row[1].strip()
+            category = row[2].strip()
+            if carrier and label and category in VALID_CATEGORIES:
+                rules[(carrier.lower(), label.lower())] = category
+
+        _rules_cache = (now, rules)
+        logger.info(f'Loaded {len(rules)} categorization rules from sheet.')
+        return rules
+
+    except Exception as e:
+        logger.warning(f'Could not load rules from sheet: {e} – using starter rules.')
+        rules = {}
+        for carrier, label, category in STARTER_RULES:
+            rules[(carrier.lower(), label.lower())] = category
+        return rules
+
+
+def categorize_row(row: dict, rules: dict) -> str:
+    """
+    Determine which tab a row belongs to.
+    Priority:
+      1. Exact match (carrier, cost_label)
+      2. Wildcard (carrier, *)
+      3. Wildcard (*, cost_label)
+      4. TAB_UNKNOWN
+    """
+    carrier = (row.get('dienstleister') or '').lower()
+    label   = (row.get('cost_label') or '').lower()
+
+    # 1. Exact match
+    cat = rules.get((carrier, label))
+    if cat:
+        return cat
+
+    # 2. Carrier wildcard (carrier, *)
+    cat = rules.get((carrier, '*'))
+    if cat:
+        return cat
+
+    # 3. Global wildcard (*, cost_label)
+    cat = rules.get(('*', label))
+    if cat:
+        return cat
+
+    return TAB_UNKNOWN
+
+
+# ─── Append rows ──────────────────────────────────────────────────────────────
+def append_rows(rows: list[dict], category_override: str | None,
+                credentials_path: str, spreadsheet_id: str) -> dict:
+    """
+    Auto-categorize and append rows to the correct tabs.
+    category_override: if set (e.g. 'Lagerkosten & Diverse'), all rows go there.
+    Returns dict with counts per tab.
     """
     if not rows:
-        return 0
+        return {}
 
-    tab_name = TAB_MAP.get(category)
-    if not tab_name:
-        raise ValueError(f"Unbekannte Kategorie: {category!r}. "
-                         f"Erlaubt: {list(TAB_MAP.keys())}")
+    rules   = load_rules(credentials_path, spreadsheet_id)
+    ss      = _get_spreadsheet(credentials_path, spreadsheet_id)
+    today   = datetime.today().strftime('%d.%m.%Y')
 
-    ss = _get_spreadsheet(credentials_path, spreadsheet_id)
-    ws = ss.worksheet(tab_name)
+    # Bucket rows by target tab
+    buckets: dict[str, list] = {t: [] for t in ALL_TABS}
 
-    # Convert dicts → ordered lists matching COLUMNS
-    today = datetime.today().strftime('%d.%m.%Y')
-    data = []
     for row in rows:
-        # Auto-fill eingang_datum if not set
         if not row.get('eingang_datum'):
             row['eingang_datum'] = today
-        data.append([_cell(row.get(col, '')) for col in COLUMNS])
 
-    ws.append_rows(data, value_input_option='USER_ENTERED')
-    return len(data)
+        if category_override and category_override in VALID_CATEGORIES:
+            target = category_override
+        else:
+            target = categorize_row(row, rules)
+
+        buckets[target].append(row)
+
+    counts = {}
+
+    # Write main tabs
+    for tab_name in MAIN_TABS:
+        tab_rows = buckets.get(tab_name, [])
+        if tab_rows:
+            ws   = ss.worksheet(tab_name)
+            data = [[_cell(r.get(col, '')) for col in COLUMNS] for r in tab_rows]
+            ws.append_rows(data, value_input_option='USER_ENTERED')
+            counts[tab_name] = len(tab_rows)
+
+    # Write Ungeklärt tab
+    unk_rows = buckets.get(TAB_UNKNOWN, [])
+    if unk_rows:
+        ws   = ss.worksheet(TAB_UNKNOWN)
+        data = [[
+            today,
+            r.get('quelldatei', ''),
+            r.get('dienstleister', ''),
+            r.get('cost_label', ''),
+            r.get('trackingnummer', ''),
+            r.get('referenz', ''),
+            _cell(r.get('betrag_brutto_eur', '')),
+            r.get('rechnungsnr', ''),
+        ] for r in unk_rows]
+        ws.append_rows(data, value_input_option='USER_ENTERED')
+        counts[TAB_UNKNOWN] = len(unk_rows)
+
+    return counts
 
 
+# ─── Duplicate check ──────────────────────────────────────────────────────────
+def invoice_already_exists(invoice_nr: str, credentials_path: str,
+                            spreadsheet_id: str) -> bool:
+    if not invoice_nr:
+        return False
+    try:
+        ss        = _get_spreadsheet(credentials_path, spreadsheet_id)
+        col_idx   = list(COLUMNS).index('rechnungsnr') + 1
+        for tab in MAIN_TABS:
+            try:
+                ws     = ss.worksheet(tab)
+                values = ws.col_values(col_idx)
+                if invoice_nr in values:
+                    return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 def _cell(value) -> str:
-    """Convert a value to a Google Sheets-safe string."""
     if value is None:
         return ''
     if isinstance(value, float):
-        # German decimal comma for Sheets
         return str(value).replace('.', ',')
     return str(value)
 
 
-# ─── Duplicate check ───────────────────────────────────────────────────────────
-def invoice_already_exists(invoice_nr: str, category: str,
-                            credentials_path: str, spreadsheet_id: str) -> bool:
-    """
-    Check if invoice_nr already appears in the rechnungsnr column of the tab.
-    Falls back to False on any error (allow upload, don't block on API issues).
-    """
-    if not invoice_nr:
-        return False
-    try:
-        tab_name = TAB_MAP.get(category, list(TAB_MAP.values())[0])
-        ss = _get_spreadsheet(credentials_path, spreadsheet_id)
-        ws = ss.worksheet(tab_name)
-
-        # Column index of rechnungsnr (0-based in COLUMNS, 1-based in Sheets)
-        col_idx = COLUMNS.index('rechnungsnr') + 1
-        values = ws.col_values(col_idx)
-        return invoice_nr in values
-    except Exception:
-        return False
+def _col_letter(n: int) -> str:
+    """Convert column number (1-based) to letter (A, B, … Z, AA, …)"""
+    result = ''
+    while n:
+        n, r = divmod(n - 1, 26)
+        result = chr(65 + r) + result
+    return result

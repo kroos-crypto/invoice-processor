@@ -1,12 +1,18 @@
 from .fedex import FedExTransportParser, FedExZollParser
+from .fedex_csv import FedExCSVParser
 from .ups import UPSTransportParser, UPSZollParser, UPSAbholParser
+from .ups_csv import UPSCSVParser
 from .transdirekt import TransdirektParser
 from .raben import RabenParser
 from .expeditors import ExpEditorsParser
 from .logfret import LogfretParser
 from .generic import GenericParser
 
+# CSV parsers must come first – they check the file extension and bail early,
+# so they don't interfere with PDF parsing of same-carrier invoices.
 PARSERS = [
+    UPSCSVParser(),
+    FedExCSVParser(),
     FedExZollParser(),
     FedExTransportParser(),
     UPSZollParser(),

@@ -20,9 +20,17 @@
   <!-- Main form -->
   <main>
 
-    <!-- Step 1: Category -->
+    <!-- Step 1: Reference -->
     <section class="card">
-      <h2><span class="step">1</span> Kategorie wählen <span class="required">*</span></h2>
+      <h2><span class="step">1</span> Interne Referenz <span class="optional">(optional)</span></h2>
+      <input type="text" id="referenz" placeholder="z.B. OR25EXAMPLE001 oder BL25EXAMPLE001"
+             autocomplete="off" />
+      <p class="hint">Nur nötig wenn die Rechnung keine Referenz enthält (z.B. Expeditors, Lagerkosten).</p>
+    </section>
+
+    <!-- Step 2: Category override (optional) -->
+    <section class="card">
+      <h2><span class="step">2</span> Kategorie-Override <span class="optional">(optional)</span></h2>
       <div class="category-group" id="category-group">
         {% for cat in categories %}
         <label class="cat-btn">
@@ -31,15 +39,11 @@
         </label>
         {% endfor %}
       </div>
-      <p class="hint">Pflichtfeld – muss vor dem Upload ausgewählt werden.</p>
-    </section>
-
-    <!-- Step 2: Reference -->
-    <section class="card">
-      <h2><span class="step">2</span> Interne Referenz <span class="optional">(optional)</span></h2>
-      <input type="text" id="referenz" placeholder="z.B. OR25EXAMPLE001 oder BL25EXAMPLE001"
-             autocomplete="off" />
-      <p class="hint">Nur nötig wenn die Rechnung keine Referenz enthält (z.B. Expeditors, Lagerkosten).</p>
+      <p class="hint">
+        Normalerweise werden Rechnungszeilen <strong>automatisch kategorisiert</strong> anhand
+        der Regeln im Sheet-Tab „Kategorieregeln". Nur ausfüllen wenn du alle Zeilen dieser
+        Datei einer bestimmten Kategorie zuweisen willst (z.B. für reine Lagerkosten-Rechnungen).
+      </p>
     </section>
 
     <!-- Step 3: Drop zone -->

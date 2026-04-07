@@ -94,7 +94,7 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// ── Category selection ────────────────────────────────────────────────────────
+// ── Category selection (optional override) ────────────────────────────────────
 catGroup.addEventListener('change', () => {
   catGroup.classList.remove('error');
   updateUploadBtn();
@@ -102,12 +102,12 @@ catGroup.addEventListener('change', () => {
 
 function getCategory() {
   const checked = catGroup.querySelector('input[name="category"]:checked');
-  return checked ? checked.value : null;
+  return checked ? checked.value : '';   // empty string = auto-categorization
 }
 
 function updateUploadBtn() {
-  const ready = selectedFiles.length > 0 && !!getCategory();
-  uploadBtn.disabled = !ready;
+  // Files are the only hard requirement; category is optional
+  uploadBtn.disabled = selectedFiles.length === 0;
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -115,14 +115,9 @@ uploadBtn.addEventListener('click', startUpload);
 clearBtn.addEventListener('click', resetAll);
 
 async function startUpload() {
-  const category = getCategory();
-  if (!category) {
-    catGroup.classList.add('error');
-    showStatus('Bitte zuerst eine Kategorie wählen.', 'error');
-    return;
-  }
-
   if (!selectedFiles.length) return;
+
+  const category = getCategory();  // may be empty → auto-categorization
 
   const referenz = document.getElementById('referenz').value.trim();
 
@@ -257,7 +252,7 @@ function appendResult(r) {
   const metaParts = [];
   if (r.provider)    metaParts.push(`<strong>Anbieter:</strong> ${escHtml(r.provider)}`);
   if (r.invoice_nr)  metaParts.push(`<strong>Rechnung:</strong> ${escHtml(r.invoice_nr)}`);
-  if (r.category)    metaParts.push(`<strong>Tab:</strong> ${escHtml(r.category)}`);
+  if (r.category)    metaParts.push(`<strong>Tabs:</strong> ${escHtml(r.category)}`);
   if (r.rows_parsed) metaParts.push(`<strong>Zeilen:</strong> ${r.rows_parsed}`);
   if (r.error)       metaParts.push(`<span style="color:var(--red)">${escHtml(r.error)}</span>`);
   if (r.message)     metaParts.push(escHtml(r.message));
