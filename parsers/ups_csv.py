@@ -35,15 +35,17 @@ from utils.normalizer import normalize_number, normalize_date
 
 # ── Charge-type → cost_label mapping ─────────────────────────────────────────
 def _charge_label(code: str, sub: str, desc: str) -> str:
-    """Produce a stable cost_label from UPS charge codes."""
+    """
+    Return just the UPS charge code as the cost_label.
+    col44 = numeric/alpha code (e.g. '410', '201', 'FSC', '01')
+    col45 = human-readable description -> stored in serviceart, not here
+    Using only the code allows simple, language-independent rule matching.
+    """
     code = (code or '').strip()
     sub  = (sub  or '').strip()
-    desc = (desc or '').strip()
-    if code and sub:
-        return f'{code}_{sub}'
     if code:
         return code
-    return desc or 'UNKNOWN'
+    return sub or desc or 'UNKNOWN'
 
 
 def _get_amount(cols: list, code: str) -> float | None:

@@ -36,19 +36,20 @@ VALID_CATEGORIES = {TAB_TRANSPORT, TAB_ZOLL, TAB_LAGER}
 
 # ─── Starter rules ────────────────────────────────────────────────────────────
 STARTER_RULES = [
-    # UPS charge codes
-    ('UPS', 'FRT_008',  TAB_TRANSPORT),
-    ('UPS', 'FRT',      TAB_TRANSPORT),
-    ('UPS', 'FSC',      TAB_TRANSPORT),   # Fuel Surcharge
-    ('UPS', 'BRK_405',  TAB_ZOLL),        # Vorlageprovision
-    ('UPS', 'BRK_410',  TAB_ZOLL),        # Zusätzl. Tarifpos.
-    ('UPS', 'BRK',      TAB_ZOLL),
-    ('UPS', 'GOV_201',  TAB_ZOLL),        # Zoll
-    ('UPS', 'GOV',      TAB_ZOLL),
-    ('UPS', 'EXM_1461', TAB_TRANSPORT),   # Einfuhrumsatzsteuer → Transport per user request
-    ('UPS', 'EXM',      TAB_TRANSPORT),
-    ('UPS', 'ACS',      TAB_TRANSPORT),   # Address Correction
-    ('UPS', 'RSC',      TAB_TRANSPORT),   # Remote Area
+    # UPS charge codes (cost_label = just the code from col44)
+    # Zoll-relevant codes
+    ('UPS', '201',  TAB_ZOLL),        # Zoll / Customs duties
+    ('UPS', '405',  TAB_ZOLL),        # Vorlageprovision
+    ('UPS', '410',  TAB_ZOLL),        # Zusätzl. Tarifpos.
+    ('UPS', '389',  TAB_ZOLL),        # PGA-Ausschlussgebühr
+    ('UPS', '212',  TAB_ZOLL),        # Importgebühren
+    ('UPS', '400',  TAB_ZOLL),        # Lacey Act / Govt compliance
+    ('UPS', '216',  TAB_ZOLL),        # Other Govt Fees
+    # Tax/MwSt → Transport per user request
+    ('UPS', '01',   TAB_TRANSPORT),   # 19% MwSt
+    ('UPS', '1461', TAB_TRANSPORT),   # Einfuhrumsatzsteuer
+    # UPS wildcard – all other codes → Transport
+    ('UPS', '*',    TAB_TRANSPORT),
     # FedEx CSV charge labels
     ('FedEx', 'Zölle',                TAB_ZOLL),
     ('FedEx', 'Aufwendungspauschale', TAB_ZOLL),
