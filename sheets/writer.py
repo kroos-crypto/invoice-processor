@@ -59,6 +59,9 @@ STARTER_RULES = [
     ('FedEx', 'Fracht',               TAB_TRANSPORT),
     ('FedEx', 'Residential Delivery', TAB_TRANSPORT),
     ('FedEx', 'Zustellgebühr',        TAB_TRANSPORT),
+    # FedEx wildcard – any label not explicitly listed above → Transport
+    # (Zölle + Aufwendungspauschale still match first and go to Zoll)
+    ('FedEx', '*',                    TAB_TRANSPORT),
     # Transdirekt – everything is Transport
     ('Transdirekt', 'Frachtkosten',   TAB_TRANSPORT),
     ('Transdirekt', 'Loseverladung',  TAB_TRANSPORT),
