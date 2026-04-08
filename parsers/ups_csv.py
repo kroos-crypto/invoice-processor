@@ -1,81 +1,62 @@
 """
 UPS CSV Invoice Parser.
 Handles UPS detail CSV exports (one row per charge line).
-Columns are positional (no header row).
+Columns are positional (no header row). Encoding: cp1252 (Windows Western European).
 
 Key column indices (0-based):
+  4  = invoice date
   5  = invoice number
-  9  = currency
  10  = invoice total
  11  = delivery date
- 13  = waybill reference
  15  = OR/BL reference
  17  = incoterm
  18  = pieces
  20  = 1Z tracking number
  26  = weight
- 27  = weight unit
  30  = packaging
- 44  = charge type code  (FRT / BRK / GOV / EXM / FSC / ...)
- 45  = charge sub-code   (008 / 405 / 410 / 201 / 1461 / ...)
- 46  = charge description
- 52  = amount A (netto for most types)
- 53  = amount B (brutto / tax amount)
- 57  = amount C (used by EXM / tax lines when col 50 is empty)
+ 44  = charge type code   (CIS / SCF / FSC / 003 / 069 / 201 / 410 / ...)
+ 45  = charge description ("Treibstoffzuschl.", "Zoll", "WW Expedited", ...)
+ 46  = internal sequence  (0000000 / 0000001 / ...)
+ 52  = charge amount
  69  = sender name
  75  = sender country
  77  = recipient name
  83  = recipient country
+ 99  = goods description
+
+Tax rows to skip: col44 == '01' (19% MwSt) or '1461' (Einfuhrumsatzsteuer)
+cost_label = col45 (human-readable description) for rule matching in Kategorieregeln
 """
 import csv
 from pathlib import Path
 from .base import BaseParser
 from utils.normalizer import normalize_number, normalize_date
 
-
-# ── Charge-type → cost_label mapping ─────────────────────────────────────────
-def _charge_label(code: str, sub: str, desc: str) -> str:
-    """
-    Return just the UPS charge code as the cost_label.
-    col44 = numeric/alpha code (e.g. '410', '201', 'FSC', '01')
-    col45 = human-readable description -> stored in serviceart, not here
-    Using only the code allows simple, language-independent rule matching.
-    """
-    code = (code or '').strip()
-    sub  = (sub  or '').strip()
-    if code:
-        return code
-    return sub or desc or 'UNKNOWN'
+# Charge codes that represent MwSt / tax — skip entirely
+TAX_CODES = {'01', '1461'}
 
 
-def _get_amount(cols: list, code: str) -> float | None:
-    """Extract the relevant charge amount depending on charge type."""
+def _get_amount(cols: list) -> float | None:
+    """Extract the charge amount. Col52 is the primary amount field."""
     def _f(idx):
         try:
             v = normalize_number(cols[idx])
             return v if v and v != 0.0 else None
         except (IndexError, Exception):
             return None
-
-    # EXM (tax/MwSt) rows have a shifted layout
-    if code == 'EXM':
-        return _f(57) or _f(56) or _f(55)
-
-    # Normal rows: col 53 is the actual charge, col 52 is base/netto
-    return _f(53) or _f(52) or _f(57)
+    return _f(52) or _f(53) or _f(57)
 
 
 class UPSCSVParser(BaseParser):
     name = 'UPS'
 
     def detect(self, text: str, filepath: str = '') -> bool:
-        ext = Path(filepath).suffix.lower()
-        if ext not in ('.csv',):
+        if Path(filepath).suffix.lower() != '.csv':
             return False
         # UPS CSV has no header row; first field is version "2.1"
         # and col 20 contains 1Z tracking numbers
         try:
-            with open(filepath, encoding='utf-8-sig', errors='replace') as f:
+            with open(filepath, encoding='cp1252', errors='replace') as f:
                 first = f.readline()
             cols = first.split(',')
             return (
@@ -89,7 +70,7 @@ class UPSCSVParser(BaseParser):
     def parse_csv(self, filepath: str) -> list:
         rows = []
         try:
-            with open(filepath, encoding='utf-8-sig', errors='replace', newline='') as f:
+            with open(filepath, encoding='cp1252', errors='replace', newline='') as f:
                 reader = csv.reader(f)
                 for raw in reader:
                     if len(raw) < 47:
@@ -98,41 +79,42 @@ class UPSCSVParser(BaseParser):
                         continue
 
                     charge_code = raw[44].strip()
-                    charge_sub  = raw[45].strip()
-                    charge_desc = raw[46].strip()
-                    amount      = _get_amount(raw, charge_code)
+                    charge_desc = raw[45].strip()   # human-readable description
 
-                    if amount is None or amount == 0.0:
+                    # Skip MwSt / Tax rows entirely
+                    if charge_code in TAX_CODES:
+                        continue
+
+                    amount = _get_amount(raw)
+                    if not amount or amount == 0.0:
                         continue  # skip zero-amount lines
 
                     row = self.empty_row(filepath)
-                    row['dienstleister']        = 'UPS'
-                    row['rechnungsnr']          = raw[5].strip().lstrip('0') or raw[5].strip()
-                    row['rechnungsdatum']       = normalize_date(raw[4].strip())
-                    row['trackingnummer']       = raw[20].strip()
-                    row['referenz']             = raw[15].strip()
-                    row['sendungsdatum']        = normalize_date(raw[11].strip())
-                    row['incoterm']             = raw[17].strip()
-                    row['anzahl_pakete']        = raw[18].strip()
-                    row['gewicht_kg']           = normalize_number(raw[26].strip())
-                    row['verpackungsart']       = raw[30].strip()
-                    row['versender_name']       = raw[69].strip() if len(raw) > 69 else ''
-                    row['versender_land']       = raw[75].strip() if len(raw) > 75 else ''
-                    row['empfaenger_name']      = raw[77].strip() if len(raw) > 77 else ''
-                    row['empfaenger_land']      = raw[83].strip() if len(raw) > 83 else ''
-                    row['warenbeschreibung']    = raw[99].strip() if len(raw) > 99 else ''
-                    row['serviceart']           = charge_sub or charge_code   # col45 = human description
-                    row['cost_label']           = _charge_label(charge_code, charge_sub, charge_desc)
-                    row['betrag_netto_eur']     = amount
-                    row['betrag_brutto_eur']    = amount
-
-                    # Total invoice amount (same for all rows of same invoice)
+                    row['dienstleister']         = 'UPS'
+                    row['rechnungsnr']           = raw[5].strip().lstrip('0') or raw[5].strip()
+                    row['rechnungsdatum']        = normalize_date(raw[4].strip())
+                    row['trackingnummer']        = raw[20].strip()
+                    row['referenz']              = raw[15].strip()
+                    row['sendungsdatum']         = normalize_date(raw[11].strip())
+                    row['incoterm']              = raw[17].strip()
+                    row['anzahl_pakete']         = raw[18].strip()
+                    row['gewicht_kg']            = normalize_number(raw[26].strip())
+                    row['verpackungsart']        = raw[30].strip()
+                    row['versender_name']        = raw[69].strip() if len(raw) > 69 else ''
+                    row['versender_land']        = raw[75].strip() if len(raw) > 75 else ''
+                    row['empfaenger_name']       = raw[77].strip() if len(raw) > 77 else ''
+                    row['empfaenger_land']       = raw[83].strip() if len(raw) > 83 else ''
+                    row['warenbeschreibung']     = raw[99].strip() if len(raw) > 99 else ''
+                    row['serviceart']            = charge_desc or charge_code
+                    row['cost_label']            = charge_desc or charge_code  # description for Kategorieregeln
+                    row['betrag_netto_eur']      = amount
+                    row['betrag_brutto_eur']     = amount
                     row['rechnungsgesamtbetrag'] = normalize_number(raw[10].strip())
 
                     rows.append(row)
 
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f'UPS CSV parse error: {e}')
+            logging.getLogger(__name__).error(f'UPS CSV parse error: {e}', exc_info=True)
 
         return rows

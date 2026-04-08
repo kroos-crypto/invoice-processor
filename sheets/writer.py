@@ -37,21 +37,23 @@ TAB_SKIP = '__SKIP__'   # special: rows with this category are silently dropped
 
 # ─── Starter rules ────────────────────────────────────────────────────────────
 STARTER_RULES = [
-    # UPS charge codes (cost_label = just the code from col44)
-    # Zoll-relevant codes
-    ('UPS', '201',  TAB_ZOLL),        # Zoll / Customs duties
-    ('UPS', '405',  TAB_ZOLL),        # Vorlageprovision
-    ('UPS', '410',  TAB_ZOLL),        # Zusätzl. Tarifpos.
-    ('UPS', '389',  TAB_ZOLL),        # PGA-Ausschlussgebühr
-    ('UPS', '212',  TAB_ZOLL),        # Importgebühren
-    ('UPS', '400',  TAB_ZOLL),        # Lacey Act / Govt compliance
-    ('UPS', '216',  TAB_ZOLL),        # Other Govt Fees
-    # MwSt/Tax → komplett überspringen (nicht importieren)
-    ('UPS',   '01',               TAB_SKIP),   # 19% MwSt
-    ('UPS',   '1461',             TAB_SKIP),   # Einfuhrumsatzsteuer
+    # UPS charge descriptions (cost_label = col45 description, cp1252 encoding)
+    # Zoll-relevante Beschreibungen
+    ('UPS', 'Zoll',                         TAB_ZOLL),
+    ('UPS', 'Vorlageprovisionsgeb.',         TAB_ZOLL),
+    ('UPS', 'Vorlageprovisionsgebühr',       TAB_ZOLL),
+    ('UPS', 'Zusätl. Tarifpos. Gebühr',     TAB_ZOLL),
+    ('UPS', 'Zusätzl. Tarifpos. Gebühr',    TAB_ZOLL),
+    ('UPS', 'Importgebühren',               TAB_ZOLL),
+    ('UPS', 'Importgebuehren',              TAB_ZOLL),
+    ('UPS', 'PGA-Ausschlussgebühr',         TAB_ZOLL),
+    ('UPS', 'Other Govt Fees',              TAB_ZOLL),
+    ('UPS', 'Gebühr Zölle und Steuern',     TAB_ZOLL),
+    ('UPS', 'Lacey Act',                    TAB_ZOLL),
+    # MwSt/Tax → überspringen (wird bereits im Parser gefiltert, aber als Fallback)
     ('FedEx', 'USt. CBS DE 19.%', TAB_SKIP),  # FedEx MwSt (Zoll-Rechnungen)
     ('FedEx', 'DE USt. 19.%',     TAB_SKIP),  # FedEx MwSt (Transport-Rechnungen)
-    # UPS wildcard – all other codes → Transport
+    # UPS wildcard – alles andere → Transport
     ('UPS', '*',    TAB_TRANSPORT),
     # FedEx CSV charge labels
     ('FedEx', 'Zölle',                TAB_ZOLL),
