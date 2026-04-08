@@ -18,11 +18,11 @@ Key column indices (0-based):
  45  = charge description ("Treibstoffzuschl.", "Zoll", "WW Expedited", ...)
  46  = internal sequence  (0000000 / 0000001 / ...)
  52  = charge amount
- 69  = sender name
- 75  = sender country
- 77  = recipient name
- 83  = recipient country
- 99  = goods description
+ 67  = sender name        (only on Zoll/international invoices)
+ 73  = sender country
+ 75  = recipient name
+ 81  = recipient country
+130  = goods description  (only on Zoll/international invoices)
 
 Tax rows to skip: col44 == '01' (19% MwSt) or '1461' (Einfuhrumsatzsteuer)
 cost_label = col45 (human-readable description) for rule matching in Kategorieregeln
@@ -100,11 +100,11 @@ class UPSCSVParser(BaseParser):
                     row['anzahl_pakete']         = raw[18].strip()
                     row['gewicht_kg']            = normalize_number(raw[26].strip())
                     row['verpackungsart']        = raw[30].strip()
-                    row['versender_name']        = raw[69].strip() if len(raw) > 69 else ''
-                    row['versender_land']        = raw[75].strip() if len(raw) > 75 else ''
-                    row['empfaenger_name']       = raw[77].strip() if len(raw) > 77 else ''
-                    row['empfaenger_land']       = raw[83].strip() if len(raw) > 83 else ''
-                    row['warenbeschreibung']     = raw[99].strip() if len(raw) > 99 else ''
+                    row['versender_name']        = raw[67].strip()  if len(raw) > 67  else ''
+                    row['versender_land']        = raw[73].strip()  if len(raw) > 73  else ''
+                    row['empfaenger_name']       = raw[75].strip()  if len(raw) > 75  else ''
+                    row['empfaenger_land']       = raw[81].strip()  if len(raw) > 81  else ''
+                    row['warenbeschreibung']     = raw[130].strip() if len(raw) > 130 else ''
                     row['serviceart']            = charge_desc or charge_code
                     row['cost_label']            = charge_desc or charge_code  # description for Kategorieregeln
                     row['betrag_netto_eur']      = amount
