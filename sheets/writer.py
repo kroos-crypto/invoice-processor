@@ -149,9 +149,8 @@ def ensure_headers(credentials_path: str, spreadsheet_id: str):
         )
         logger.info(f'Kategorieregeln tab initialised with {len(STARTER_RULES)} starter rules.')
 
-    # Ungeklaert tab
-    unk_headers = ['Upload-Datum', 'Quelldatei', 'Carrier', 'Cost_Label',
-                   'Trackingnummer', 'Referenz', 'Betrag EUR', 'Rechnungs-Nr.']
+    # Ungeklaert tab – same 26 columns as main tabs so rows can be copied directly
+    unk_headers = [COLUMN_HEADERS[col] for col in COLUMNS]
     unk_ws    = _get_or_create_ws(ss, TAB_UNKNOWN, rows=500, cols=len(unk_headers))
     first_row = unk_ws.row_values(1)
     if not first_row or first_row[0] != unk_headers[0]:
@@ -277,20 +276,11 @@ def append_rows(rows: list[dict], category_override: str | None,
             ws.append_rows(data, value_input_option='USER_ENTERED')
             counts[tab_name] = len(tab_rows)
 
-    # Write Ungeklärt tab
+    # Write Ungeklärt tab – same 26 columns as main tabs
     unk_rows = buckets.get(TAB_UNKNOWN, [])
     if unk_rows:
         ws   = ss.worksheet(TAB_UNKNOWN)
-        data = [[
-            today,
-            r.get('quelldatei', ''),
-            r.get('dienstleister', ''),
-            r.get('cost_label', ''),
-            r.get('trackingnummer', ''),
-            r.get('referenz', ''),
-            _cell(r.get('betrag_brutto_eur', '')),
-            r.get('rechnungsnr', ''),
-        ] for r in unk_rows]
+        data = [[_cell(r.get(col, '')) for col in COLUMNS] for r in unk_rows]
         ws.append_rows(data, value_input_option='USER_ENTERED')
         counts[TAB_UNKNOWN] = len(unk_rows)
 
