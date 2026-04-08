@@ -33,6 +33,7 @@ MAIN_TABS = [TAB_TRANSPORT, TAB_ZOLL, TAB_LAGER]
 ALL_TABS  = MAIN_TABS + [TAB_RULES, TAB_UNKNOWN]
 
 VALID_CATEGORIES = {TAB_TRANSPORT, TAB_ZOLL, TAB_LAGER}
+TAB_SKIP = '__SKIP__'   # special: rows with this category are silently dropped
 
 # ─── Starter rules ────────────────────────────────────────────────────────────
 STARTER_RULES = [
@@ -45,15 +46,16 @@ STARTER_RULES = [
     ('UPS', '212',  TAB_ZOLL),        # Importgebühren
     ('UPS', '400',  TAB_ZOLL),        # Lacey Act / Govt compliance
     ('UPS', '216',  TAB_ZOLL),        # Other Govt Fees
-    # Tax/MwSt → Transport per user request
-    ('UPS', '01',   TAB_TRANSPORT),   # 19% MwSt
-    ('UPS', '1461', TAB_TRANSPORT),   # Einfuhrumsatzsteuer
+    # MwSt/Tax → komplett überspringen (nicht importieren)
+    ('UPS',   '01',               TAB_SKIP),   # 19% MwSt
+    ('UPS',   '1461',             TAB_SKIP),   # Einfuhrumsatzsteuer
+    ('FedEx', 'USt. CBS DE 19.%', TAB_SKIP),  # FedEx MwSt (Zoll-Rechnungen)
+    ('FedEx', 'DE USt. 19.%',     TAB_SKIP),  # FedEx MwSt (Transport-Rechnungen)
     # UPS wildcard – all other codes → Transport
     ('UPS', '*',    TAB_TRANSPORT),
     # FedEx CSV charge labels
     ('FedEx', 'Zölle',                TAB_ZOLL),
     ('FedEx', 'Aufwendungspauschale', TAB_ZOLL),
-    ('FedEx', 'USt. CBS DE 19.%',     TAB_TRANSPORT),
     ('FedEx', 'Kraftstoffzuschlag',   TAB_TRANSPORT),
     ('FedEx', 'Transportgebühr',      TAB_TRANSPORT),
     ('FedEx', 'Express Fracht',       TAB_TRANSPORT),
@@ -256,6 +258,9 @@ def append_rows(rows: list[dict], category_override: str | None,
             target = category_override
         else:
             target = categorize_row(row, rules)
+
+        if target == TAB_SKIP:
+            continue   # MwSt/Tax-Zeilen komplett ignorieren
 
         buckets[target].append(row)
 

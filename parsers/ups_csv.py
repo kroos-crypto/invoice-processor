@@ -121,7 +121,7 @@ class UPSCSVParser(BaseParser):
                     row['empfaenger_name']      = raw[77].strip() if len(raw) > 77 else ''
                     row['empfaenger_land']      = raw[83].strip() if len(raw) > 83 else ''
                     row['warenbeschreibung']    = raw[99].strip() if len(raw) > 99 else ''
-                    row['serviceart']           = charge_desc or charge_code
+                    row['serviceart']           = charge_sub or charge_code   # col45 = human description
                     row['cost_label']           = _charge_label(charge_code, charge_sub, charge_desc)
                     row['betrag_netto_eur']     = amount
                     row['betrag_brutto_eur']    = amount
