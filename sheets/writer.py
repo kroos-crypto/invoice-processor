@@ -246,15 +246,10 @@ def append_rows(rows: list[dict], category_override: str | None,
 
     rules   = load_rules(credentials_path, spreadsheet_id)
     ss      = _get_spreadsheet(credentials_path, spreadsheet_id)
-    today   = datetime.today().strftime('%d.%m.%Y')
-
     # Bucket rows by target tab
     buckets: dict[str, list] = {t: [] for t in ALL_TABS}
 
     for row in rows:
-        if not row.get('eingang_datum'):
-            row['eingang_datum'] = today
-
         if category_override and category_override in VALID_CATEGORIES:
             target = category_override
         else:

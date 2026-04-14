@@ -95,6 +95,7 @@ class UPSCSVParser(BaseParser):
 
                     row = self.empty_row(filepath)
                     row['dienstleister']         = 'UPS'
+                    row['kundennummer']          = raw[1].strip().lstrip('0') or raw[1].strip()
                     row['rechnungsnr']           = raw[5].strip().lstrip('0') or raw[5].strip()
                     row['rechnungsdatum']        = normalize_date(raw[4].strip())
                     row['trackingnummer']        = raw[20].strip()

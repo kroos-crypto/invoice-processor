@@ -35,6 +35,7 @@ from .base import BaseParser
 from utils.normalizer import normalize_number, normalize_date
 
 # Fixed column indices
+C_KUNDENNR      = 3
 C_RECHNUNGSART  = 1
 C_INVOICE_NR    = 5
 C_INV_DATE      = 6
@@ -102,6 +103,7 @@ class FedExCSVParser(BaseParser):
                         continue  # skip empty / summary rows
 
                     invoice_nr   = _col(data, C_INVOICE_NR)
+                    kundennr     = _col(data, C_KUNDENNR)
                     inv_date     = normalize_date(_col(data, C_INV_DATE))
                     due_date     = normalize_date(_col(data, C_DUE_DATE))
                     currency     = _col(data, C_CURRENCY) or 'EUR'
@@ -136,6 +138,7 @@ class FedExCSVParser(BaseParser):
 
                         row = self.empty_row(filepath)
                         row['dienstleister']         = 'FedEx'
+                        row['kundennummer']          = kundennr
                         row['rechnungsnr']           = invoice_nr
                         row['rechnungsdatum']        = inv_date
                         row['faelligkeitsdatum']     = due_date

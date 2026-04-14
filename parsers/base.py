@@ -4,8 +4,8 @@ import os
 
 
 COLUMNS = [
-    'eingang_datum',
     'dienstleister',
+    'kundennummer',
     'rechnungsnr',
     'rechnungsdatum',
     'faelligkeitsdatum',
@@ -38,8 +38,8 @@ COLUMNS = [
 
 # Human-readable German headers for Google Sheet
 COLUMN_HEADERS = {
-    'eingang_datum':           'Eingang-Datum',
     'dienstleister':           'Dienstleister',
+    'kundennummer':            'Kundennummer',
     'rechnungsnr':             'Rechnungs-Nr.',
     'rechnungsdatum':          'Rechnungsdatum',
     'faelligkeitsdatum':       'Fälligkeitsdatum',
@@ -89,7 +89,6 @@ class BaseParser:
 
     def empty_row(self, filepath: str = '') -> dict:
         return {col: '' for col in COLUMNS} | {
-            'eingang_datum': datetime.now().strftime('%d.%m.%Y %H:%M'),
             'quelldatei': os.path.basename(filepath) if filepath else '',
         }
 
