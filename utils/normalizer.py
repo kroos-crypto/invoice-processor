@@ -99,13 +99,20 @@ def normalize_date(date_str) -> str:
         if mon in DE_MONTHS:
             return f'{day}.{DE_MONTHS[mon]}.{year}'
 
-    # Standard strptime formats
-    for fmt in ('%d/%m/%Y', '%d.%m.%Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%y'):
+    # Standard strptime formats – note: Python's %d/%m accept 1- or 2-digit values
+    for fmt in ('%d/%m/%Y', '%d.%m.%Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%y',
+                '%m/%d/%y', '%Y%m%d'):
         try:
             dt = datetime.strptime(s, fmt)
-            return dt.strftime('%d.%m.%Y')
+            return dt.strftime('%d.%m.%Y')   # always zero-padded
         except ValueError:
             continue
+
+    # Last-ditch: try to parse D.M.YYYY (single-digit day and/or month)
+    m = re.match(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$', s)
+    if m:
+        day, mon, year = m.group(1).zfill(2), m.group(2).zfill(2), m.group(3)
+        return f'{day}.{mon}.{year}'
 
     return s  # Return as-is
 

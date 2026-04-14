@@ -115,6 +115,25 @@ def _get_or_create_ws(ss, title: str, rows: int = 2000, cols: int = 30):
     return ss.worksheet(title)
 
 
+# ─── Column format definitions ────────────────────────────────────────────────
+# Columns that should display as DD.MM.YYYY date
+DATE_COLUMNS = {'rechnungsdatum', 'faelligkeitsdatum', 'sendungsdatum', 'zustelldatum'}
+# Columns that should display as German number  1.234,56
+EUR_COLUMNS  = {'rechnungsgesamtbetrag', 'betrag_netto_eur', 'mwst_betrag_eur', 'betrag_brutto_eur'}
+
+
+def _apply_column_formats(ws, total_rows: int = 5000):
+    """Apply date and number formats to data columns (rows 2 onward)."""
+    col_list = list(COLUMNS)
+    for i, col in enumerate(col_list):
+        letter = _col_letter(i + 1)
+        data_range = f'{letter}2:{letter}{total_rows}'
+        if col in DATE_COLUMNS:
+            ws.format(data_range, {'numberFormat': {'type': 'DATE', 'pattern': 'DD.MM.YYYY'}})
+        elif col in EUR_COLUMNS:
+            ws.format(data_range, {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0.00'}})
+
+
 # ─── Header initialisation ────────────────────────────────────────────────────
 def ensure_headers(credentials_path: str, spreadsheet_id: str):
     ss      = _get_spreadsheet(credentials_path, spreadsheet_id)
@@ -131,6 +150,8 @@ def ensure_headers(credentials_path: str, spreadsheet_id: str):
                 'backgroundColor': {'red': 0.18, 'green': 0.34, 'blue': 0.56},
             })
             ws.freeze(rows=1)
+        # Always (re-)apply column formats so existing tabs get updated too
+        _apply_column_formats(ws, total_rows=5000)
 
     # Kategorieregeln tab
     rules_ws  = _get_or_create_ws(ss, TAB_RULES, rows=500, cols=3)
@@ -304,11 +325,15 @@ def invoice_already_exists(invoice_nr: str, credentials_path: str,
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-def _cell(value) -> str:
+def _cell(value):
+    """Return a Sheets-compatible cell value.
+    Floats are returned as-is so USER_ENTERED treats them as numbers
+    and column number/date formats apply correctly.
+    """
     if value is None:
         return ''
     if isinstance(value, float):
-        return str(value).replace('.', ',')
+        return value   # let Sheets handle formatting via column format
     return str(value)
 
 
