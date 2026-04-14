@@ -70,7 +70,7 @@ class LogfretParser(BaseParser):
                     ctx = page_text[max(0, start - 100):start + 400]
                     ref_m = re.search(r'(?:Reference|Referenz|Your Ref\.?|Ref\.?)[:\s]+([A-Z]{2}[\d\w]+)', ctx, re.IGNORECASE)
                     if ref_m:
-                        row['referenz'] = clean_text(ref_m.group(1))
+                        row['referenz_1'] = clean_text(ref_m.group(1))
 
                     # Amount for this AWB
                     amt_m = re.search(r'(?:EUR|USD)\s*([\d.,]+)\s*(?:EUR)?', ctx[ctx.find(m.group(1)):])
@@ -95,7 +95,7 @@ class LogfretParser(BaseParser):
 
             # Try to get reference
             ref_m = re.search(r'(?:Reference|Referenz|Your Ref\.?)[:\s]+([A-Z]{2}[\d\w]+)', text, re.IGNORECASE)
-            row['referenz'] = clean_text(ref_m.group(1)) if ref_m else ''
+            row['referenz_1'] = clean_text(ref_m.group(1)) if ref_m else ''
 
             rows.append(row)
 

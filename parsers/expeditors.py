@@ -31,7 +31,7 @@ class ExpEditorsParser(BaseParser):
 
         # Customer reference: "Vs.Rif." (may be empty → manual input needed)
         m = re.search(r'Vs\.Rif\.?\s+([\w/\-_]+)', text)
-        row['referenz'] = clean_text(m.group(1)) if m else ''
+        row['referenz_1'] = clean_text(m.group(1)) if m else ''
 
         # Destination
         m = re.search(r'Destinazione\s+(\w+)', text)

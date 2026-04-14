@@ -99,7 +99,7 @@ class FedExTransportParser(BaseParser):
                 row['serviceart'] = clean_text(m.group(3))
                 row['anzahl_pakete'] = m.group(4)
                 row['gewicht_kg'] = normalize_number(m.group(5).replace(' ', ''))
-                row['referenz'] = clean_text(m.group(6))
+                row['referenz_1'] = clean_text(m.group(6))
                 amount = normalize_number(m.group(9).replace(' ', ''))
                 row['betrag_netto_eur'] = amount
                 row['betrag_brutto_eur'] = amount
@@ -178,7 +178,7 @@ class FedExZollParser(BaseParser):
                 row['trackingnummer'] = m.group(1)
                 row['sendungsdatum'] = normalize_date(m.group(2))
                 row['serviceart'] = clean_text(m.group(3))
-                row['referenz'] = clean_text(m.group(4))
+                row['referenz_1'] = clean_text(m.group(4))
                 row['betrag_netto_eur'] = normalize_number(m.group(9))
                 row['betrag_brutto_eur'] = normalize_number(m.group(9))
                 row['mwst_satz'] = '19'

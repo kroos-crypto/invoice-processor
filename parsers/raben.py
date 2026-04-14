@@ -80,7 +80,7 @@ class RabenParser(BaseParser):
 
                     # Kundenreferenz
                     ref_m = re.search(r'Kundenreferenz[:\s]+([\w\-_/]+)', context)
-                    row['referenz'] = clean_text(ref_m.group(1)) if ref_m else m.group(3)
+                    row['referenz_1'] = clean_text(ref_m.group(1)) if ref_m else m.group(3)
 
                     # Von (Versender)
                     von_m = re.search(r'Von[:\s]*\n?(.*?)(?:An[:\s]|\Z)', context, re.DOTALL)

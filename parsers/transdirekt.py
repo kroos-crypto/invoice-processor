@@ -32,7 +32,7 @@ class TransdirektParser(BaseParser):
         m = re.search(r'Referenz[:\s]+([\w/\-_]+)', text)
         if not m:
             m = re.search(r'(BL\d{2}\w+|PBL\d{2}\w+|OR\d{2}\w+)', text)
-        row['referenz'] = clean_text(m.group(1)) if m else ''
+        row['referenz_1'] = clean_text(m.group(1)) if m else ''
 
         # Incoterm
         m = re.search(r'(EXW|FCA|FOB|CPT|CIP|DAP|DDP|DDU|FAS|CFR|CIF)', text)

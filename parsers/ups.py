@@ -82,7 +82,7 @@ class UPSTransportParser(BaseParser):
                 row['dienstleister'] = 'UPS'
                 row['sendungsdatum'] = normalize_date(m.group(1))
                 row['trackingnummer'] = m.group(2)
-                row['referenz'] = clean_text(m.group(3))
+                row['referenz_1'] = clean_text(m.group(3))
                 row['serviceart'] = clean_text(m.group(4))
                 row['anzahl_pakete'] = m.group(5)
                 row['betrag_netto_eur'] = normalize_number(m.group(8))
@@ -104,7 +104,7 @@ class UPSTransportParser(BaseParser):
                 row['dienstleister'] = 'UPS'
                 row['sendungsdatum'] = normalize_date(m2.group(1))
                 row['trackingnummer'] = m2.group(5)
-                row['referenz'] = clean_text(m2.group(4))
+                row['referenz_1'] = clean_text(m2.group(4))
                 row['serviceart'] = 'Abholauftrag'
 
                 # Get cost from next lines
@@ -166,7 +166,7 @@ class UPSZollParser(BaseParser):
                 row['dienstleister'] = 'UPS'
                 row['sendungsdatum'] = normalize_date(m.group(1))
                 row['trackingnummer'] = m.group(2)
-                row['referenz'] = clean_text(m.group(3))
+                row['referenz_1'] = clean_text(m.group(3))
                 row['serviceart'] = 'WW Expedited / Zoll'
                 row['anzahl_pakete'] = m.group(5)
                 wt = m.group(6).split('/')[0]
@@ -250,7 +250,7 @@ class UPSAbholParser(BaseParser):
                 row['trackingnummer'] = m.group(6) or m.group(3)
                 # Combine refs
                 refs = [r for r in [m.group(4), m.group(5)] if r and r != m.group(6)]
-                row['referenz'] = ' / '.join(clean_text(r) for r in refs)
+                row['referenz_1'] = ' / '.join(clean_text(r) for r in refs)
                 row['serviceart'] = 'Abholgebühr'
 
                 # Sender from next line

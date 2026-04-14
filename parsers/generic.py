@@ -61,7 +61,7 @@ class GenericParser(BaseParser):
         ]:
             m = re.search(pattern, text, re.IGNORECASE)
             if m:
-                row['referenz'] = clean_text(m.group(1))
+                row['referenz_1'] = clean_text(m.group(1))
                 break
 
         # Total amount – try multiple patterns
