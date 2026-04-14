@@ -52,8 +52,12 @@ C_PIECES        = 32
 C_WEIGHT        = 33
 C_WEIGHT_UNIT   = 34
 C_SENDER_NAME   = 38
+C_SENDER_ORT    = 43
+C_SENDER_PLZ    = 45
 C_SENDER_LAND   = 46
 C_RECV_NAME     = 47
+C_RECV_ORT      = 52
+C_RECV_PLZ      = 54
 C_RECV_LAND     = 55
 C_CHARGE_START  = 66   # first Gebührenetikett; +1 = Betrag, +2 = next Etikett, ...
 
@@ -111,9 +115,13 @@ class FedExCSVParser(BaseParser):
                     pieces       = _col(data, C_PIECES)
                     weight       = normalize_number(_col(data, C_WEIGHT))
                     packaging    = _col(data, C_PACKAGING)
-                    sender_name  = _col(data, C_SENDER_NAME)
+                    sender_name  = _col(data, C_SENDER_NAME) or _col(data, 39)  # Firma or Ansprechpartner
+                    sender_plz   = _col(data, C_SENDER_PLZ)
+                    sender_ort   = _col(data, C_SENDER_ORT)
                     sender_land  = _col(data, C_SENDER_LAND)
-                    recv_name    = _col(data, C_RECV_NAME)
+                    recv_name    = _col(data, C_RECV_NAME) or _col(data, 48)
+                    recv_plz     = _col(data, C_RECV_PLZ)
+                    recv_ort     = _col(data, C_RECV_ORT)
                     recv_land    = _col(data, C_RECV_LAND)
 
                     # Walk all charge pairs starting at C_CHARGE_START
@@ -139,8 +147,12 @@ class FedExCSVParser(BaseParser):
                         row['cost_label']            = label
                         row['incoterm']              = ''
                         row['versender_name']        = sender_name
+                        row['versender_plz']         = sender_plz
+                        row['versender_ort']         = sender_ort
                         row['versender_land']        = sender_land
                         row['empfaenger_name']       = recv_name
+                        row['empfaenger_plz']        = recv_plz
+                        row['empfaenger_ort']        = recv_ort
                         row['empfaenger_land']       = recv_land
                         row['warenbeschreibung']     = ''
                         row['gewicht_kg']            = weight

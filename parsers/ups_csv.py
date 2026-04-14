@@ -19,8 +19,12 @@ Key column indices (0-based):
  46  = internal sequence  (0000000 / 0000001 / ...)
  52  = charge amount
  67  = sender name        (only on Zoll/international invoices)
+ 70  = sender city
+ 72  = sender postal code
  73  = sender country
  75  = recipient name
+ 78  = recipient city
+ 80  = recipient postal code
  81  = recipient country
 130  = goods description  (only on Zoll/international invoices)
 
@@ -101,8 +105,12 @@ class UPSCSVParser(BaseParser):
                     row['gewicht_kg']            = normalize_number(raw[26].strip())
                     row['verpackungsart']        = raw[30].strip()
                     row['versender_name']        = raw[67].strip()  if len(raw) > 67  else ''
+                    row['versender_plz']         = raw[72].strip()  if len(raw) > 72  else ''
+                    row['versender_ort']         = raw[70].strip()  if len(raw) > 70  else ''
                     row['versender_land']        = raw[73].strip()  if len(raw) > 73  else ''
                     row['empfaenger_name']       = raw[75].strip()  if len(raw) > 75  else ''
+                    row['empfaenger_plz']        = raw[80].strip()  if len(raw) > 80  else ''
+                    row['empfaenger_ort']        = raw[78].strip()  if len(raw) > 78  else ''
                     row['empfaenger_land']       = raw[81].strip()  if len(raw) > 81  else ''
                     row['warenbeschreibung']     = raw[130].strip() if len(raw) > 130 else ''
                     row['serviceart']            = charge_desc or charge_code
