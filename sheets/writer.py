@@ -143,15 +143,21 @@ def ensure_headers(credentials_path: str, spreadsheet_id: str):
     for tab_name in MAIN_TABS:
         ws        = _get_or_create_ws(ss, tab_name, rows=5000, cols=len(headers) + 2)
         first_row = ws.row_values(1)
-        if not first_row or first_row[0] != headers[0]:
+        # Rebuild headers if: tab is empty, first header is wrong, OR column count changed
+        needs_header = (
+            not first_row or
+            first_row[0] != headers[0] or
+            len(first_row) != len(headers)
+        )
+        if needs_header:
+            ws.clear()           # wipe old data so mismatched rows don't remain
             ws.update('A1', [headers])
             ws.format(f'A1:{_col_letter(len(headers))}1', {
                 'textFormat':      {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
                 'backgroundColor': {'red': 0.18, 'green': 0.34, 'blue': 0.56},
             })
             ws.freeze(rows=1)
-        # Always (re-)apply column formats so existing tabs get updated too
-        _apply_column_formats(ws, total_rows=5000)
+            _apply_column_formats(ws, total_rows=5000)   # only format after fresh header
 
     # Kategorieregeln tab
     rules_ws  = _get_or_create_ws(ss, TAB_RULES, rows=500, cols=3)
@@ -170,17 +176,24 @@ def ensure_headers(credentials_path: str, spreadsheet_id: str):
         )
         logger.info(f'Kategorieregeln tab initialised with {len(STARTER_RULES)} starter rules.')
 
-    # Ungeklaert tab – same 26 columns as main tabs so rows can be copied directly
+    # Ungeklaert tab – same columns as main tabs so rows can be copied directly
     unk_headers = [COLUMN_HEADERS[col] for col in COLUMNS]
     unk_ws    = _get_or_create_ws(ss, TAB_UNKNOWN, rows=500, cols=len(unk_headers))
     first_row = unk_ws.row_values(1)
-    if not first_row or first_row[0] != unk_headers[0]:
+    needs_unk_header = (
+        not first_row or
+        first_row[0] != unk_headers[0] or
+        len(first_row) != len(unk_headers)
+    )
+    if needs_unk_header:
+        unk_ws.clear()
         unk_ws.update('A1', [unk_headers])
         unk_ws.format(f'A1:{_col_letter(len(unk_headers))}1', {
             'textFormat':      {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
             'backgroundColor': {'red': 0.7, 'green': 0.3, 'blue': 0.1},
         })
         unk_ws.freeze(rows=1)
+        _apply_column_formats(unk_ws, total_rows=500)
 
 
 # ─── Rules engine ─────────────────────────────────────────────────────────────

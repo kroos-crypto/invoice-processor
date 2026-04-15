@@ -150,8 +150,8 @@ def upload():
             # Apply manual reference if provided and row has none
             if referenz:
                 for row in rows:
-                    if not row.get('referenz'):
-                        row['referenz'] = referenz
+                    if not row.get('referenz_1'):
+                        row['referenz_1'] = referenz
 
             # Write to Google Sheet
             written = 0
