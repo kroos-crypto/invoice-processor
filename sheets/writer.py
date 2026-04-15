@@ -112,7 +112,11 @@ def _get_or_create_ws(ss, title: str, rows: int = 2000, cols: int = 30):
     titles = [ws.title for ws in ss.worksheets()]
     if title not in titles:
         return ss.add_worksheet(title=title, rows=rows, cols=cols)
-    return ss.worksheet(title)
+    ws = ss.worksheet(title)
+    # Expand grid if the existing tab has fewer columns than needed
+    if ws.col_count < cols:
+        ws.resize(rows=max(ws.row_count, rows), cols=cols)
+    return ws
 
 
 # ─── Column format definitions ────────────────────────────────────────────────
